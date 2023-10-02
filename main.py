@@ -7,18 +7,19 @@ import matplotlib.pyplot as plt
 
 from simpletransformers.classification import ClassificationModel
 from sklearn.metrics import classification_report, confusion_matrix
+from preprocess import preprocess_pipeline
 
 
 def get_trained_model(model_name: str, train_data: pd.DataFrame, train_data_name: str, output_dir: str):
  
     model = ClassificationModel('bert', model_name, args={"output_dir": 'output/' + train_data_name + '_' + output_dir,
-                                                          'overwrite_output_dir': True},use_cuda=False)
+                                                          'overwrite_output_dir': True, 'train_batch_size': 16, 'num_train_epochs': 5}, use_cuda=True)
     model.train_model(train_data[['text','labels']])
 
     return model
     
 def load_model(model_path: str):
-    model = ClassificationModel('bert', model_path, use_cuda=False)
+    model = ClassificationModel('bert', model_path, use_cuda=True)
 
     return model
 
@@ -26,8 +27,11 @@ def predict(no_models: bool):
     # train models if none exist
     if no_models:
         # load data sets
-        olid = pd.read_csv('data/olid-train-small.csv', nrows=10)
-        hasoc = pd.read_csv('data/hasoc-train.csv', nrows=10)
+        olid = pd.read_csv('data/olid-train-small.csv')
+        olid['text'] = olid['text'].apply(preprocess_pipeline)
+        
+        hasoc = pd.read_csv('data/hasoc-train.csv')
+        hasoc['text'] = hasoc['text'].apply(preprocess_pipeline)
         # create dict of datasets
         data = {'olid': olid, 'hasoc': hasoc}
 
@@ -45,14 +49,15 @@ def predict(no_models: bool):
         # load model and predict
         model = load_model('output/' + filename)
         predictions = model.predict(olid['text'].tolist())
-        test_data = pd.read_csv('data/olid-test.csv', nrows=10)
+        test_data = pd.read_csv('data/olid-test.csv')
+        test_data['text'] = test_data['text'].apply(preprocess_pipeline)
 
         # Specify the file path where you want to save the dictionary
         file_path = 'results/' + output_dir + '_' + train_data_name
 
         # get metrics
         results(predictions[0], test_data['labels'], file_path)
-  
+    pass
 
 
 def results(predictions, true_labels, file_path):
@@ -72,5 +77,6 @@ def results(predictions, true_labels, file_path):
         json.dump(metrics, file)
     
 if __name__ == '__main__':
+    
     predict(no_models=True)
 
