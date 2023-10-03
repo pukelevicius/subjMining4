@@ -43,7 +43,7 @@ def results(predictions, true_labels, file_path):
     plt.savefig(file_path + '_confusion_matrix.png')
     # Serialize and save the dictionary to a file
     plt.close()
-    
+
     with open(file_path + "_metrics.json", "a") as file:
         json.dump(metrics, file)
     
@@ -63,4 +63,5 @@ if __name__ == '__main__':
     SVM(olid_train_cleaned_df['text'], olid_train_cleaned_df['labels'], olid_test_cleaned_df['text'], 
         olid_test_cleaned_df['labels'], 'results\SVM_in_domain')
     
-    SVM(olid_train_cleaned_df['text'], olid_train_cleaned_df['labels'], hasoc['text'], hasoc['labels'], 'results\SVM_cross_domain') 
+    SVM(hasoc['text'], hasoc['labels'], olid_test_cleaned_df['text'], 
+        olid_test_cleaned_df['labels'], 'results\SVM_cross_domain') 
