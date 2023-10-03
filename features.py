@@ -1,51 +1,66 @@
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-from nltk.sentiment.util import mark_negation
-import emoji
 import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from scipy.sparse import hstack 
+from sklearn.svm import LinearSVC
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+from preprocess import preprocess_pipeline
+import matplotlib.pyplot as plt
+import json
 
-# Download necessary NLTK resources (if not already downloaded)
-nltk.download('punkt')
-nltk.download('vader_lexicon')
+def SVM(X_train, Y_train, X_test, Y_test, results_path):
+    # create n-grams for the datasets
+    vec_word = CountVectorizer(analyzer = 'word', ngram_range = (1,1), lowercase = False)
+    vec_char = CountVectorizer(analyzer = 'char', ngram_range = (1,1), lowercase = False)
 
-# Sample DataFrame with text data
-data = {'text': ['I love this movie! 😃', 'Hate speech is not acceptable! 😡']}
-df = pd.DataFrame(data)
+    # transform data
+    X_train = hstack((vec_word.fit_transform(X_train),vec_char.fit_transform(X_train)))
+    X_test = hstack((vec_word.transform(X_test),vec_char.transform(X_test)))
 
-# Tokenize the text, including emojis
-def tokenize_with_emojis(text):
-    tokens = word_tokenize(text)
-    tokens_with_emojis = []
-    for token in tokens:
-        tokens_with_emojis.extend([emoj for emoj in emoji.demojize(token).split(':') if emoj])
-    return tokens_with_emojis
+    # train the model
+    lsv = LinearSVC(random_state = 0)
+    lsv.fit(X_train, Y_train)
 
-df['tokens'] = df['text'].apply(tokenize_with_emojis)
+    # predict the labels
+    predictions = lsv.predict(X_test)
+    
+    # saving the matrix 
+    results(predictions, Y_test, results_path)
 
-# Perform sentiment analysis using VADER
-sid = SentimentIntensityAnalyzer()
+    return 
 
-def analyze_sentiment(tokens):
-    # Join the tokens back into a sentence
-    text = ' '.join(tokens)
-    # Perform sentiment analysis
-    sentiment_scores = sid.polarity_scores(mark_negation(text))
-    return sentiment_scores
+def results(predictions, true_labels, file_path):
+    # metrics: precision, recall, f1-score
+    metrics = classification_report(y_true=true_labels, y_pred=predictions)
+    # confusion matrix
+    cm = confusion_matrix(true_labels, predictions)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
 
-df['sentiment_scores'] = df['tokens'].apply(analyze_sentiment)
+    # Save the heatmap as an image
+    plt.savefig(file_path + '_confusion_matrix.png')
+    # Serialize and save the dictionary to a file
+    plt.close()
+    
+    with open(file_path + "_metrics.json", "a") as file:
+        json.dump(metrics, file)
+    
+    file.close()
+    
+if __name__ == '__main__':
 
-# Extract sentiment labels
-def extract_sentiment_label(sentiment_scores):
-    compound_score = sentiment_scores['compound']
-    if compound_score >= 0.05:
-        return 'positive'
-    elif compound_score <= -0.05:
-        return 'negative'
-    else:
-        return 'neutral'
-
-df['sentiment'] = df['sentiment_scores'].apply(extract_sentiment_label)
-
-# Display the DataFrame with sentiment analysis results
-print(df[['text', 'tokens', 'sentiment_scores', 'sentiment']])
+    # load the data
+    olid_test_cleaned_df = pd.read_csv('data\olid-test-cleaned.csv', sep = ',', header = 0)
+    olid_train_cleaned_df = pd.read_csv('data\olid-train-small-cleaned.csv', sep = ',', header = 0)
+    hasoc = pd.read_csv('data\hasoc-train.csv', sep = ',', header = 0)
+    
+    # cleaning the data
+    hasoc['text'] = hasoc['text'].apply(preprocess_pipeline)
+    
+    # getting the predictions
+    SVM(olid_train_cleaned_df['text'], olid_train_cleaned_df['labels'], olid_test_cleaned_df['text'], 
+        olid_test_cleaned_df['labels'], 'results\SVM_in_domain')
+    
+    SVM(olid_train_cleaned_df['text'], olid_train_cleaned_df['labels'], hasoc['text'], hasoc['labels'], 'results\SVM_cross_domain') 
